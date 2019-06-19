@@ -47,7 +47,7 @@ const MiniBar = ({ value, extent: [min, max], options, cellHeight }) => {
         className="text-ellipsis text-bold text-right flex-full"
         style={{ minWidth: LABEL_MIN_WIDTH }}
       >
-        {formatValue(value, { ...options, jsx: true, type: "cell" })}
+        {formatValue(value, { ...options, jsx: true })}
       </div>
       {/* OUTER CONTAINER BAR */}
       <div

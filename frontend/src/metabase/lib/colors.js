@@ -15,7 +15,7 @@ export type ColorFamily = { [name: ColorName]: ColorString };
 /* eslint-disable no-color-literals */
 const colors = {
   brand: "#509EE3",
-  accent1: "#9CC177",
+  accent1: "#88BF4D",
   accent2: "#A989C5",
   accent3: "#EF8C8C",
   accent4: "#F9D45C",
@@ -29,7 +29,7 @@ const colors = {
   error: "#ED6E6E",
   warning: "#F9CF48",
   "text-dark": "#2E353B",
-  "text-medium": "#74838F",
+  "text-medium": "#A4ADB3",
   "text-light": "#C7CFD4",
   "text-white": "#FFFFFF",
   "bg-black": "#2E353B",
@@ -38,7 +38,7 @@ const colors = {
   "bg-light": "#F9FBFC",
   "bg-white": "#FFFFFF",
   shadow: "rgba(0,0,0,0.08)",
-  border: "#D7DBDE",
+  border: "#F0F0F0",
   /* Saturated colors for the SQL editor. Shouldn't be used elsewhere since they're not white-labelable. */
   "saturated-blue": "#2D86D4",
   "saturated-green": "#70A63A",

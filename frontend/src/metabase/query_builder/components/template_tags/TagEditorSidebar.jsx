@@ -1,13 +1,18 @@
 /* @flow weak */
 
-import React, { Component } from "react";
+import React from "react";
 import PropTypes from "prop-types";
+
 import Icon from "metabase/components/Icon.jsx";
-import TagEditorParam from "./TagEditorParam.jsx";
-import TagEditorHelp from "./TagEditorHelp.jsx";
-import MetabaseAnalytics from "metabase/lib/analytics";
+
 import { t } from "ttag";
 import cx from "classnames";
+
+import TagEditorParam from "./TagEditorParam";
+import TagEditorHelp from "./TagEditorHelp";
+import SidebarHeader from "../SidebarHeader";
+
+import MetabaseAnalytics from "metabase/lib/analytics";
 
 import NativeQuery from "metabase-lib/lib/queries/NativeQuery";
 import type { DatasetQuery } from "metabase/meta/types/Card";
@@ -32,7 +37,7 @@ type State = {
   section: "help" | "settings",
 };
 
-export default class TagEditorSidebar extends Component {
+export default class TagEditorSidebar extends React.Component {
   props: Props;
   state: State = {
     section: "settings",
@@ -78,16 +83,8 @@ export default class TagEditorSidebar extends Component {
     }
 
     return (
-      <div className="DataReference-container p3 full-height scroll-y">
-        <div className="DataReference-header flex align-center mb2">
-          <h2 className="text-default">{t`Variables`}</h2>
-          <a
-            className="flex-align-right text-default text-brand-hover no-decoration"
-            onClick={() => onClose()}
-          >
-            <Icon name="close" size={18} />
-          </a>
-        </div>
+      <div className="DataReference-container p3 scroll-y">
+        <SidebarHeader title={t`Variables`} onClose={onClose} />
         <div className="DataReference-content">
           <div className="Button-group Button-group--brand text-uppercase mb2">
             <a

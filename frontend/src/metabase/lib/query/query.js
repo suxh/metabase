@@ -11,6 +11,8 @@ import type {
   LimitClause,
   OrderBy,
   OrderByClause,
+  JoinClause,
+  Join,
   ExpressionClause,
   ExpressionName,
   Expression,
@@ -21,6 +23,7 @@ import type { TableMetadata } from "metabase/meta/types/Metadata";
 import * as A from "./aggregation";
 import * as B from "./breakout";
 import * as F from "./filter";
+import * as J from "./join";
 import * as L from "./limit";
 import * as O from "./order_by";
 import * as E from "./expression";
@@ -83,6 +86,18 @@ export const clearFilters = (query: SQ) =>
 
 export const canAddFilter = (query: SQ) => F.canAddFilter(query.filter);
 
+// JOIN
+
+export const getJoins = (query: SQ) => J.getJoins(query.joins);
+export const addJoin = (query: SQ, join: Join) =>
+  setJoinClause(query, J.addJoin(query.joins, join));
+export const updateJoin = (query: SQ, index: number, join: Join) =>
+  setJoinClause(query, J.updateJoin(query.joins, index, join));
+export const removeJoin = (query: SQ, index: number) =>
+  setJoinClause(query, J.removeJoin(query.joins, index));
+export const clearJoins = (query: SQ) =>
+  setJoinClause(query, J.clearJoins(query.joins));
+
 // ORDER_BY
 
 export const getOrderBys = (query: SQ) => O.getOrderBys(query["order-by"]);
@@ -133,7 +148,7 @@ export const updateExpression = (
   );
 export const removeExpression = (query: SQ, name: ExpressionName) =>
   setExpressionClause(query, E.removeExpression(query.expressions, name));
-export const clearExpression = (query: SQ) =>
+export const clearExpressions = (query: SQ) =>
   setExpressionClause(query, E.clearExpressions(query.expressions));
 
 // we can enforce various constraints in these functions:
@@ -169,6 +184,9 @@ function setBreakoutClause(query: SQ, breakoutClause: ?BreakoutClause): SQ {
 }
 function setFilterClause(query: SQ, filterClause: ?FilterClause): SQ {
   return setClause("filter", query, filterClause);
+}
+function setJoinClause(query: SQ, joinClause: ?JoinClause): SQ {
+  return setClause("joins", query, joinClause);
 }
 function setOrderByClause(query: SQ, orderByClause: ?OrderByClause): SQ {
   return setClause("order-by", query, orderByClause);

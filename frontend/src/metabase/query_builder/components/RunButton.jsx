@@ -1,21 +1,33 @@
 import React, { Component } from "react";
 import PropTypes from "prop-types";
 import { t } from "ttag";
-import Icon from "metabase/components/Icon.jsx";
+
+import Button from "metabase/components/Button";
+import Icon from "metabase/components/Icon";
 
 import cx from "classnames";
 
 export default class RunButton extends Component {
   static propTypes = {
+    className: PropTypes.string,
     isRunnable: PropTypes.bool.isRequired,
     isRunning: PropTypes.bool.isRequired,
     isDirty: PropTypes.bool.isRequired,
+    isPreviewing: PropTypes.bool,
     onRun: PropTypes.func.isRequired,
     onCancel: PropTypes.func,
   };
 
   render() {
-    const { isRunnable, isRunning, isDirty, onRun, onCancel } = this.props;
+    const {
+      isRunnable,
+      isRunning,
+      isDirty,
+      isPreviewing,
+      onRun,
+      onCancel,
+      className,
+    } = this.props;
     let buttonText = null;
     if (isRunning) {
       buttonText = (
@@ -25,29 +37,31 @@ export default class RunButton extends Component {
         </div>
       );
     } else if (isRunnable && isDirty) {
-      buttonText = t`Get Answer`;
+      if (isPreviewing) {
+        buttonText = t`Get Preview`;
+      } else {
+        buttonText = t`Get Answer`;
+      }
     } else if (isRunnable && !isDirty) {
-      buttonText = (
-        <div className="flex align-center">
-          <Icon className="sm-mr1" name="refresh" />
-          <span className="hide sm-show">{t`Refresh`}</span>
-        </div>
-      );
+      buttonText = <Icon name="refresh" />;
     }
-    const actionFn = isRunning ? onCancel : onRun;
-    const classes = cx(
-      "Button Button--medium circular RunButton ml-auto mr-auto block",
-      {
-        "RunButton--hidden": !buttonText,
-        "Button--primary": isDirty,
-        "text-medium": !isDirty,
-        "text-brand-hover": !isDirty,
-      },
-    );
     return (
-      <button className={classes} onClick={() => actionFn()}>
+      <Button
+        medium
+        primary={isDirty}
+        className={cx(
+          "RunButton circular",
+          {
+            "RunButton--hidden": !buttonText,
+            "text-medium": !isDirty,
+            "text-brand-hover": !isDirty,
+          },
+          className,
+        )}
+        onClick={isRunning ? onCancel : onRun}
+      >
         {buttonText}
-      </button>
+      </Button>
     );
   }
 }

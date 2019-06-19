@@ -10,15 +10,10 @@ import {
   SET_IS_SHOWING_TEMPLATE_TAGS_EDITOR,
   CLOSE_QB_TUTORIAL,
   CLOSE_QB_NEWB_MODAL,
-  BEGIN_EDITING,
-  CANCEL_EDITING,
-  LOAD_TABLE_METADATA,
-  LOAD_DATABASE_FIELDS,
   RELOAD_CARD,
   API_CREATE_QUESTION,
   API_UPDATE_QUESTION,
   SET_CARD_AND_RUN,
-  SET_CARD_ATTRIBUTE,
   SET_CARD_VISUALIZATION,
   UPDATE_CARD_VISUALIZATION_SETTINGS,
   REPLACE_ALL_CARD_VISUALIZATION_SETTINGS,
@@ -28,7 +23,6 @@ import {
   SET_QUERY_SOURCE_TABLE,
   SET_QUERY_MODE,
   UPDATE_QUESTION,
-  SET_DATASET_QUERY,
   RUN_QUERY,
   CLEAR_QUERY_RESULT,
   CANCEL_QUERY,
@@ -41,13 +35,43 @@ import {
   UPDATE_ENABLE_EMBEDDING,
   UPDATE_EMBEDDING_PARAMS,
   SHOW_CHART_SETTINGS,
+  SET_UI_CONTROLS,
 } from "./actions";
+
+const DEFAULT_UI_CONTROLS = {
+  isShowingDataReference: false,
+  isShowingTemplateTagsEditor: false,
+  isShowingTutorial: false,
+  isShowingNewbModal: false,
+  isEditing: false,
+  isRunning: false,
+  isAddingFilter: false,
+  isEditingFilterIndex: null,
+  isAddingAggregation: false,
+  isEditingAggregationIndex: null,
+  isAddingBreakout: false,
+  isEditingBreakoutIndex: null,
+  isShowingChartTypeSidebar: false,
+  isShowingChartSettingsSidebar: false,
+  initialChartSetting: null,
+  isPreviewing: true, // sql preview mode
+  isShowingTable: false, // table/viz toggle
+  queryBuilderMode: false, // "view" or "notebook"
+};
 
 // various ui state options
 export const uiControls = handleActions(
   {
+    [SET_UI_CONTROLS]: {
+      next: (state, { payload }) => ({ ...state, ...payload }),
+    },
+
     [INITIALIZE_QB]: {
-      next: (state, { payload }) => ({ ...state, ...payload.uiControls }),
+      next: (state, { payload }) => ({
+        ...state,
+        ...DEFAULT_UI_CONTROLS,
+        ...payload.uiControls,
+      }),
     },
 
     [TOGGLE_DATA_REFERENCE]: {
@@ -71,12 +95,6 @@ export const uiControls = handleActions(
         isShowingDataReference: false,
       }),
     },
-    [SET_DATASET_QUERY]: {
-      next: (state, { payload }) => ({
-        ...state,
-        isShowingTemplateTagsEditor: payload.openTemplateTagsEditor,
-      }),
-    },
     [CLOSE_QB_TUTORIAL]: {
       next: (state, { payload }) => ({ ...state, isShowingTutorial: false }),
     },
@@ -84,12 +102,6 @@ export const uiControls = handleActions(
       next: (state, { payload }) => ({ ...state, isShowingNewbModal: false }),
     },
 
-    [BEGIN_EDITING]: {
-      next: (state, { payload }) => ({ ...state, isEditing: true }),
-    },
-    [CANCEL_EDITING]: {
-      next: (state, { payload }) => ({ ...state, isEditing: false }),
-    },
     [API_UPDATE_QUESTION]: {
       next: (state, { payload }) => ({ ...state, isEditing: false }),
     },
@@ -109,18 +121,14 @@ export const uiControls = handleActions(
     },
 
     [SHOW_CHART_SETTINGS]: {
-      next: (state, { payload }) => ({ ...state, chartSettings: payload }),
+      next: (state, { payload }) => ({
+        ...state,
+        isShowingChartSettingsSidebar: true,
+        initialChartSetting: payload,
+      }),
     },
   },
-  {
-    isShowingDataReference: false,
-    isShowingTemplateTagsEditor: false,
-    isShowingTutorial: false,
-    isShowingNewbModal: false,
-    isEditing: false,
-    isRunning: false,
-    chartSettings: null,
-  },
+  DEFAULT_UI_CONTROLS,
 );
 
 // the card that is actively being worked on
@@ -131,17 +139,10 @@ export const card = handleActions(
       next: (state, { payload }) => (payload ? payload.card : null),
     },
     [RELOAD_CARD]: { next: (state, { payload }) => payload },
-    [CANCEL_EDITING]: { next: (state, { payload }) => payload },
     [SET_CARD_AND_RUN]: { next: (state, { payload }) => payload.card },
     [API_CREATE_QUESTION]: { next: (state, { payload }) => payload },
     [API_UPDATE_QUESTION]: { next: (state, { payload }) => payload },
 
-    [SET_CARD_ATTRIBUTE]: {
-      next: (state, { payload }) => ({
-        ...state,
-        [payload.attr]: payload.value,
-      }),
-    },
     [SET_CARD_VISUALIZATION]: { next: (state, { payload }) => payload },
     [UPDATE_CARD_VISUALIZATION_SETTINGS]: {
       next: (state, { payload }) => payload,
@@ -155,7 +156,6 @@ export const card = handleActions(
     [SET_QUERY_MODE]: { next: (state, { payload }) => payload },
     [SET_QUERY_DATABASE]: { next: (state, { payload }) => payload },
     [SET_QUERY_SOURCE_TABLE]: { next: (state, { payload }) => payload },
-    [SET_DATASET_QUERY]: { next: (state, { payload }) => payload.card },
     [UPDATE_QUESTION]: (state, { payload: { card } }) => card,
 
     [QUERY_COMPLETED]: {
@@ -200,9 +200,6 @@ export const originalCard = handleActions(
     [RELOAD_CARD]: {
       next: (state, { payload }) => (payload.id ? Utils.copy(payload) : null),
     },
-    [CANCEL_EDITING]: {
-      next: (state, { payload }) => (payload.id ? Utils.copy(payload) : null),
-    },
     [SET_CARD_AND_RUN]: {
       next: (state, { payload }) =>
         payload.originalCard ? Utils.copy(payload.originalCard) : null,
@@ -215,26 +212,6 @@ export const originalCard = handleActions(
     },
   },
   null,
-);
-
-export const tableForeignKeys = handleActions(
-  {
-    [RESET_QB]: { next: (state, { payload }) => null },
-    [LOAD_TABLE_METADATA]: {
-      next: (state, { payload }) =>
-        payload && payload.foreignKeys ? payload.foreignKeys : state,
-    },
-  },
-  null,
-);
-
-export const databaseFields = handleActions(
-  {
-    [LOAD_DATABASE_FIELDS]: {
-      next: (state, { payload }) => ({ [payload.id]: payload.fields }),
-    },
-  },
-  {},
 );
 
 // references to FK tables specifically used on the ObjectDetail page.

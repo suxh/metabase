@@ -88,37 +88,6 @@ const Query = {
     return dataset_query && dataset_query.type === "native";
   },
 
-  canRun(query, tableMetadata) {
-    if (
-      !query ||
-      query["source-table"] == null ||
-      !Query.hasValidAggregation(query)
-    ) {
-      return false;
-    }
-    // check that the table supports this aggregation, if we have tableMetadata
-    if (tableMetadata) {
-      const aggs = Query.getAggregations(query);
-      if (aggs.length === 0) {
-        if (
-          !_.findWhere(tableMetadata.aggregation_options, { short: "rows" })
-        ) {
-          return false;
-        }
-      } else {
-        for (const [agg] of aggs) {
-          if (
-            agg !== "metric" &&
-            !_.findWhere(tableMetadata.aggregation_options, { short: agg })
-          ) {
-            // return false;
-          }
-        }
-      }
-    }
-    return true;
-  },
-
   cleanQuery(query) {
     if (!query) {
       return query;
@@ -497,22 +466,6 @@ const Query = {
     }
 
     console.warn("Unknown field type: ", field);
-  },
-
-  getFieldPath(fieldId, tableDef) {
-    const path = [];
-    while (fieldId != null) {
-      const field = Table.getField(tableDef, fieldId);
-      path.unshift(field);
-      fieldId = field && field.parent_id;
-    }
-    return path;
-  },
-
-  getFieldPathName(fieldId, tableDef) {
-    return Query.getFieldPath(fieldId, tableDef)
-      .map(formatField)
-      .join(": ");
   },
 
   getDatetimeUnit(field) {

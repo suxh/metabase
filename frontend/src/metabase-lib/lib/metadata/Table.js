@@ -17,6 +17,8 @@ import { titleize, humanize } from "metabase/lib/formatting";
 
 import Dimension from "../Dimension";
 
+type EntityType = string; // TODO: move somewhere central
+
 import _ from "underscore";
 
 /** This is the primary way people interact with tables */
@@ -28,14 +30,38 @@ export default class Table extends Base {
 
   fields: FieldMetadata[];
 
+  entity_type: ?EntityType;
+
+  hasSchema(): boolean {
+    return (this.schema && this.db.schemaNames().length > 1) || false;
+  }
+
   // $FlowFixMe Could be replaced with hydrated database property in selectors/metadata.js (instead / in addition to `table.db`)
   get database() {
     return this.db;
   }
 
   newQuestion(): Question {
-    // $FlowFixMe
-    return new Question();
+    let question = Question.create({
+      databaseId: this.db_id,
+      tableId: this.id,
+      metadata: this.metadata,
+    });
+    // NOTE: special case for Google Analytics which doesn't allow raw queries:
+    if (this.entity_type === "entity/GoogleAnalyticsTable") {
+      const dateField = _.findWhere(this.fields, { name: "ga:date" });
+      if (dateField) {
+        question = question
+          .query()
+          .addFilter(["time-interval", ["field-id", dateField.id], -365, "day"])
+          .addAggregation(["metric", "ga:users"])
+          .addAggregation(["metric", "ga:pageviews"])
+          .addBreakout(["datetime-field", ["field-id", dateField.id], "week"])
+          .question()
+          .setDisplay("line");
+      }
+    }
+    return question;
   }
 
   dimensions(): Dimension[] {

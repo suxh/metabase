@@ -12,6 +12,7 @@ import StructuredQuery, {
 import NativeQuery from "./queries/NativeQuery";
 
 import { memoize } from "metabase-lib/lib/utils";
+import MetabaseUtils from "metabase/lib/utils";
 import * as Card_DEPRECATED from "metabase/lib/card";
 
 import { getParametersWithExtras, isTransientId } from "metabase/meta/Card";
@@ -24,6 +25,7 @@ import {
   distribution,
   toUnderlyingRecords,
   drillUnderlyingRecords,
+  guessVisualization,
 } from "metabase/modes/lib/actions";
 
 import _ from "underscore";
@@ -43,6 +45,7 @@ import { MetabaseApi, CardApi } from "metabase/services";
 import Questions from "metabase/entities/questions";
 
 import AtomicQuery from "metabase-lib/lib/queries/AtomicQuery";
+import { DatetimeFieldDimension } from "metabase-lib/lib/Dimension";
 
 import type { Dataset } from "metabase/meta/types/Dataset";
 import type { TableId } from "metabase/meta/types/Table";
@@ -54,6 +57,7 @@ import {
   ALERT_TYPE_ROWS,
   ALERT_TYPE_TIMESERIES_GOAL,
 } from "metabase-lib/lib/Alert";
+import { BinnedDimension } from "./Dimension";
 
 type QuestionUpdateFn = (q: Question) => ?Promise<void>;
 
@@ -210,6 +214,10 @@ export default class Question {
     return this.query() instanceof NativeQuery;
   }
 
+  isStructured(): boolean {
+    return this.query() instanceof StructuredQuery;
+  }
+
   /**
    * Returns a new Question object with an updated query.
    * The query is saved to the `dataset_query` field of the Card object.
@@ -221,6 +229,10 @@ export default class Question {
       );
     }
     return this;
+  }
+
+  datasetQuery(): DatasetQuery {
+    return this.card().dataset_query;
   }
 
   setDatasetQuery(newDatasetQuery: DatasetQuery): Question {
@@ -248,6 +260,71 @@ export default class Question {
     return this.setCard(assoc(this.card(), "display", display));
   }
 
+  setDisplayDefault(): Question {
+    const query = this.query();
+    if (query instanceof StructuredQuery) {
+      // TODO: move to StructuredQuery?
+      const aggregations = query.aggregations();
+      const breakouts = query.breakouts();
+      const breakoutDimensions = breakouts.map(b => b.dimension());
+      const breakoutFields = breakoutDimensions.map(d => d.field());
+      if (aggregations.length === 0 && breakouts.length === 0) {
+        return this.setDisplay("table");
+      }
+      if (aggregations.length === 1 && breakouts.length === 0) {
+        return this.setDisplay("scalar");
+      }
+      if (aggregations.length === 1 && breakouts.length === 1) {
+        if (breakoutFields[0].isState()) {
+          return this.setDisplay("map").updateSettings({
+            "map.type": "region",
+            "map.region": "us_states",
+          });
+        } else if (breakoutFields[0].isCountry()) {
+          return this.setDisplay("map").updateSettings({
+            "map.type": "region",
+            "map.region": "world_countries",
+          });
+        }
+      }
+      if (aggregations.length >= 1 && breakouts.length === 1) {
+        if (breakoutFields[0].isDate()) {
+          if (
+            breakoutDimensions[0] instanceof DatetimeFieldDimension &&
+            breakoutDimensions[0].isExtraction()
+          ) {
+            return this.setDisplay("bar");
+          } else {
+            return this.setDisplay("line");
+          }
+        }
+        if (breakoutDimensions[0] instanceof BinnedDimension) {
+          return this.setDisplay("bar");
+        }
+        if (breakoutFields[0].isCategory()) {
+          return this.setDisplay("bar");
+        }
+      }
+      if (aggregations.length === 1 && breakouts.length === 2) {
+        if (_.any(breakoutFields, f => f.isDate())) {
+          return this.setDisplay("line");
+        }
+        if (
+          breakoutFields[0].isCoordinate() &&
+          breakoutFields[1].isCoordinate()
+        ) {
+          return this.setDisplay("map").updateSettings({
+            "map.type": "grid",
+          });
+        }
+        if (_.all(breakoutFields, f => f.isCategory())) {
+          return this.setDisplay("bar");
+        }
+      }
+    }
+    return this.setDisplay("table");
+  }
+
   // DEPRECATED: use settings
   visualizationSettings(...args) {
     return this.settings(...args);
@@ -265,6 +342,10 @@ export default class Question {
   }
   updateSettings(settings: VisualizationSettings) {
     return this.setVisualizationSettings({ ...this.settings(), ...settings });
+  }
+
+  type(): string {
+    return this.datasetQuery().type;
   }
 
   isEmpty(): boolean {
@@ -417,13 +498,16 @@ export default class Question {
   collectionId(): ?number {
     return this._card && this._card.collection_id;
   }
-
   setCollectionId(collectionId: number) {
     return this.setCard(assoc(this.card(), "collection_id", collectionId));
   }
 
   id(): number {
     return this._card && this._card.id;
+  }
+
+  description(): ?string {
+    return this._card && this._card.description;
   }
 
   isSaved(): boolean {
@@ -434,13 +518,32 @@ export default class Question {
     return this._card && this._card.public_uuid;
   }
 
-  getUrl(originalQuestion?: Question): string {
-    const isDirty =
-      !originalQuestion || this.isDirtyComparedTo(originalQuestion);
+  database(): ?Database {
+    const query = this.query();
+    return query && query.database && query.database();
+  }
+  databaseId() {
+    const db = this.database();
+    return db && db.id;
+  }
+  table() {
+    const query = this.query();
+    return query && query.table && query.table();
+  }
+  tableId() {
+    const table = this.table();
+    return table && table.id;
+  }
 
-    return isDirty
-      ? Urls.question(null, this._serializeForUrl())
-      : Urls.question(this.id(), "");
+  getUrl(originalQuestion?: Question): string {
+    if (
+      !this.id() ||
+      (originalQuestion && this.isDirtyComparedTo(originalQuestion))
+    ) {
+      return Urls.question(null, this._serializeForUrl());
+    } else {
+      return Urls.question(this.id(), "");
+    }
   }
 
   getAutomaticDashboardUrl(filters /*?: Filter[] = []*/) {
@@ -496,6 +599,22 @@ export default class Question {
       result_metadata: metadataColumns,
       metadata_checksum: metadataChecksum,
     });
+  }
+
+  /**
+   * Returns true if the questions are equivalent (including id, card, and parameters)
+   */
+  isEqual(other) {
+    if (!other) {
+      return false;
+    } else if (this.id() != other.id()) {
+      return false;
+    } else if (!_.isEqual(this.card(), other.card())) {
+      return false;
+    } else if (!_.isEqual(this.parameters(), other.parameters())) {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -587,36 +706,16 @@ export default class Question {
 
   // predicate function that dermines if the question is "dirty" compared to the given question
   isDirtyComparedTo(originalQuestion: Question) {
-    // TODO Atte Keinänen 6/8/17: Reconsider these rules because they don't completely match
-    // the current implementation which uses original_card_id for indicating that question has a lineage
-
-    // The rules:
-    //   - if it's new, then it's dirty when
-    //       1) there is a database/table chosen or
-    //       2) when there is any content on the native query
-    //   - if it's saved, then it's dirty when
-    //       1) the current card doesn't match the last saved version
-
-    if (!this._card) {
-      return false;
-    } else if (!this._card.id) {
-      if (
-        this._card.dataset_query.query &&
-        this._card.dataset_query.query["source-table"]
-      ) {
-        return true;
-      } else if (
-        this._card.dataset_query.type === "native" &&
-        !_.isEmpty(this._card.dataset_query.native.query)
-      ) {
-        return true;
-      } else {
-        return false;
-      }
+    if (!this.isSaved() && this.canRun()) {
+      // if it's new, then it's dirty if it is runnable
+      return true;
     } else {
-      const origCardSerialized = originalQuestion._serializeForUrl({
-        includeOriginalCardId: false,
-      });
+      // if it's saved, then it's dirty when the current card doesn't match the last saved version
+      const origCardSerialized =
+        originalQuestion &&
+        originalQuestion._serializeForUrl({
+          includeOriginalCardId: false,
+        });
       const currentCardSerialized = this._serializeForUrl({
         includeOriginalCardId: false,
       });

@@ -1,7 +1,7 @@
 /* @flow */
 
 import React from "react";
-import { Link, Route, IndexRedirect } from "react-router";
+import { Link, Route, IndexRoute } from "react-router";
 
 import {
   Archived,
@@ -9,8 +9,6 @@ import {
   NotFound,
   Unauthorized,
 } from "metabase/containers/ErrorPages";
-
-import fitViewport from "metabase/hoc/FitViewPort";
 
 const ErrorWithDetails = () => <GenericError details="Example error message" />;
 
@@ -40,9 +38,9 @@ const WelcomeApp = () => {
   );
 };
 
-const InternalLayout = fitViewport(({ children }) => {
+const InternalLayout = ({ children }) => {
   return (
-    <div className="flex flex-column flex-full">
+    <div className="flex flex-column full-height">
       <nav className="wrapper flex align-center py3 border-bottom">
         <a className="text-brand-hover" href="/_internal">
           <h4>Style Guide</h4>
@@ -63,12 +61,11 @@ const InternalLayout = fitViewport(({ children }) => {
       <div className="flex flex-full">{children}</div>
     </div>
   );
-});
+};
 
 export default (
   <Route component={InternalLayout}>
-    <IndexRedirect to="welcome" />
-    <Route path="welcome" component={WelcomeApp} />
+    <IndexRoute component={WelcomeApp} />
     {Object.entries(PAGES).map(
       ([name, Component]) =>
         Component &&

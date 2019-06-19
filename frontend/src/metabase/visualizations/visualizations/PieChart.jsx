@@ -11,10 +11,7 @@ import {
   ChartSettingsError,
   MinRowsError,
 } from "metabase/visualizations/lib/errors";
-import {
-  getFriendlyName,
-  computeMaxDecimalsForValues,
-} from "metabase/visualizations/lib/utils";
+import { getFriendlyName } from "metabase/visualizations/lib/utils";
 import {
   metricSetting,
   dimensionSetting,
@@ -212,25 +209,21 @@ export default class PieChart extends Component {
         jsx,
         majorWidth: 0,
       });
-
-    const total: number = rows.reduce((sum, row) => sum + row[metricIndex], 0);
-    const decimals = computeMaxDecimalsForValues(
-      rows.map(row => row[metricIndex] / total),
-      { style: "percent", maximumSignificantDigits: 3 },
-    );
     const formatPercent = (percent, jsx = true) =>
       formatValue(percent, {
         ...settings.column(cols[metricIndex]),
         jsx,
         majorWidth: 0,
         number_style: "percent",
-        _numberFormatter: undefined, // remove the passed formatter
-        decimals,
+        minimumSignificantDigits: 3,
+        maximumSignificantDigits: 3,
       });
 
     const showPercentInTooltip =
       !PERCENT_REGEX.test(cols[metricIndex].name) &&
       !PERCENT_REGEX.test(cols[metricIndex].display_name);
+
+    const total: number = rows.reduce((sum, row) => sum + row[metricIndex], 0);
 
     const sliceThreshold =
       typeof settings["pie.slice_threshold"] === "number"
@@ -247,23 +240,26 @@ export default class PieChart extends Component {
       .partition(d => d.percentage > sliceThreshold)
       .value();
 
-    const otherTotal = others.reduce((acc, o) => acc + o.value, 0);
-    // Multiple others get squashed together under the key "Other"
-    let otherSlice =
-      others.length === 1
-        ? others[0]
-        : {
-            key: "Other",
-            value: otherTotal,
-            percentage: otherTotal / total,
-            color: colors["text-light"],
-          };
-    if (otherSlice.value > 0) {
-      // increase "other" slice so it's barely visible
-      if (otherSlice.percentage < OTHER_SLICE_MIN_PERCENTAGE) {
-        otherSlice.value = total * OTHER_SLICE_MIN_PERCENTAGE;
+    let otherSlice;
+    if (others.length > 1) {
+      const otherTotal = others.reduce((acc, o) => acc + o.value, 0);
+      if (otherTotal > 0) {
+        otherSlice = {
+          key: "Other",
+          value: otherTotal,
+          percentage: otherTotal / total,
+          color: colors["text-light"],
+        };
+        slices.push(otherSlice);
       }
-      slices.push(otherSlice);
+    } else {
+      slices.push(...others);
+    }
+
+    // increase "other" slice so it's barely visible
+    // $FlowFixMe
+    if (otherSlice && otherSlice.percentage < OTHER_SLICE_MIN_PERCENTAGE) {
+      otherSlice.value = total * OTHER_SLICE_MIN_PERCENTAGE;
     }
 
     const legendTitles = slices.map(slice => [

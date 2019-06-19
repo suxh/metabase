@@ -399,8 +399,14 @@ export default class DataSelector extends Component {
       className,
       style,
       triggerIconSize,
+      triggerElement,
       getTriggerElementContent,
     } = this.props;
+
+    if (triggerElement) {
+      return triggerElement;
+    }
+
     const {
       selectedDatabase,
       selectedSegment,
@@ -429,7 +435,7 @@ export default class DataSelector extends Component {
       return this.props.triggerClasses;
     }
     return this.props.renderAsSelect
-      ? "border-med bg-white block no-decoration"
+      ? "border-medium bg-white block no-decoration"
       : "flex align-center";
   }
 
@@ -645,10 +651,10 @@ const SegmentAndDatabasePicker = ({
       className="text-brand"
       sections={sections}
       onChange={onChangeSchema}
-      onChangeSection={index => {
-        index === 0
+      onChangeSection={(section, sectionIndex) => {
+        sectionIndex === 0
           ? onShowSegmentSection()
-          : onChangeDatabase(index - segmentItem.length, true);
+          : onChangeDatabase(sectionIndex - segmentItem.length, true);
       }}
       itemIsSelected={schema => selectedSchema === schema}
       renderSectionIcon={section => (
@@ -733,7 +739,9 @@ export const DatabaseSchemaPicker = ({
         className="text-brand"
         sections={sections}
         onChange={onChangeSchema}
-        onChangeSection={dbId => onChangeDatabase(dbId, true)}
+        onChangeSection={(section, sectionIndex) =>
+          onChangeDatabase(sectionIndex, true)
+        }
         itemIsSelected={schema => schema === selectedSchema}
         renderSectionIcon={item => (
           <Icon className="Icon text-default" name={item.icon} size={18} />

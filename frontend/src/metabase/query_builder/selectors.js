@@ -9,10 +9,10 @@ import { getComputedSettingsForSeries } from "metabase/visualizations/lib/settin
 
 import { getParametersWithExtras } from "metabase/meta/Card";
 
-import { isCardDirty } from "metabase/lib/card";
 import Utils from "metabase/lib/utils";
 
 import Question from "metabase-lib/lib/Question";
+import NativeQuery from "metabase-lib/lib/queries/NativeQuery";
 
 import Databases from "metabase/entities/databases";
 
@@ -43,13 +43,6 @@ export const getFirstQueryResult = state =>
 // get instance settings, used for determining whether to display certain actions
 export const getSettings = state => state.settings.values;
 
-export const getIsDirty = createSelector(
-  [getCard, getOriginalCard],
-  (card, originalCard) => {
-    return isCardDirty(card, originalCard);
-  },
-);
-
 export const getIsNew = state => state.qb.card && !state.qb.card.id;
 
 export const getDatabaseId = createSelector(
@@ -62,7 +55,6 @@ export const getTableId = createSelector(
   card => getIn(card, ["dataset_query", "query", "source-table"]),
 );
 
-export const getTableForeignKeys = state => state.qb.tableForeignKeys;
 export const getTableForeignKeyReferences = state =>
   state.qb.tableForeignKeyReferences;
 
@@ -93,7 +85,12 @@ export const getNativeDatabases = createSelector(
 
 export const getTableMetadata = createSelector(
   [getTableId, getMetadata],
-  (tableId, metadata) => metadata.tables[tableId],
+  (tableId, metadata) => metadata.table(tableId),
+);
+
+export const getTableForeignKeys = createSelector(
+  [getTableMetadata],
+  table => table && table.fks,
 );
 
 export const getSampleDatasetId = createSelector(
@@ -106,7 +103,7 @@ export const getSampleDatasetId = createSelector(
 
 export const getDatabaseFields = createSelector(
   [getDatabaseId, state => state.qb.databaseFields],
-  (databaseId, databaseFields) => databaseFields[databaseId],
+  (databaseId, databaseFields) => [], // FIXME!
 );
 
 import { getMode as getMode_ } from "metabase/modes/lib/modes";
@@ -199,6 +196,13 @@ export const getOriginalQuestion = createSelector(
   },
 );
 
+export const getIsDirty = createSelector(
+  [getQuestion, getOriginalQuestion],
+  (question, originalQuestion) => {
+    return question && question.isDirtyComparedTo(originalQuestion);
+  },
+);
+
 export const getQuery = createSelector(
   [getQuestion],
   question => question && question.query(),
@@ -225,8 +229,26 @@ export const getResultsMetadata = createSelector(
  * Returns the card and query results data in a format that `Visualization.jsx` expects
  */
 export const getRawSeries = createSelector(
-  [getQuestion, getQueryResults, getIsObjectDetail, getLastRunDatasetQuery],
-  (question, results, isObjectDetail, lastRunDatasetQuery) => {
+  [
+    getQuestion,
+    getQueryResults,
+    getIsObjectDetail,
+    getLastRunDatasetQuery,
+    getUiControls,
+  ],
+  (question, results, isObjectDetail, lastRunDatasetQuery, uiControls) => {
+    let display = question && question.display();
+    let settings = question && question.settings();
+    if (isObjectDetail) {
+      display = "object";
+    } else if (uiControls.isShowingTable && display !== "scalar") {
+      display = "table";
+      settings = {
+        ...settings,
+        "table.pivot": false,
+      };
+    }
+
     // we want to provide the visualization with a card containing the latest
     // "display", "visualization_settings", etc, (to ensure the correct visualization is shown)
     // BUT the last executed "dataset_query" (to ensure data matches the query)
@@ -235,7 +257,8 @@ export const getRawSeries = createSelector(
       question.atomicQueries().map((metricQuery, index) => ({
         card: {
           ...question.card(),
-          display: isObjectDetail ? "object" : question.card().display,
+          display: display,
+          visualization_settings: settings,
           dataset_query: lastRunDatasetQuery,
         },
         data: results[index] && results[index].data,
@@ -261,4 +284,45 @@ export const getTransformedSeries = createSelector(
 export const getVisualizationSettings = createSelector(
   [getTransformedSeries],
   series => series && getComputedSettingsForSeries(series),
+);
+
+export const getQueryBuilderMode = createSelector(
+  [getUiControls],
+  uiControls => uiControls.queryBuilderMode,
+);
+
+/**
+ * Returns whether the current question is a native query
+ */
+export const getIsNative = createSelector(
+  [getQuestion],
+  question => question && question.query() instanceof NativeQuery,
+);
+
+/**
+ * Returns whether the native query editor is open
+ */
+export const getIsNativeEditorOpen = createSelector(
+  [getIsNative, getUiControls],
+  (isNative, uiControls) => isNative && uiControls.isNativeEditorOpen,
+);
+
+/**
+ * Returns whether the query can be "preview", i.e. native query editor is open and visualization is table
+ */
+export const getIsPreviewable = createSelector(
+  [getIsNativeEditorOpen, getQuestion, getIsNew, getIsDirty],
+  (isNativeEditorOpen, question, isNew, isDirty) =>
+    isNativeEditorOpen &&
+    question &&
+    question.display() === "table" &&
+    (isNew || isDirty),
+);
+
+/**
+ * Returns whether the query builder is in native query "preview" mode
+ */
+export const getIsPreviewing = createSelector(
+  [getIsPreviewable, getUiControls],
+  (isPreviewable, uiControls) => isPreviewable && uiControls.isPreviewing,
 );

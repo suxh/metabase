@@ -50,17 +50,19 @@ export default class NativeQuery extends AtomicQuery {
   }
 
   static isDatasetQueryType(datasetQuery: DatasetQuery): boolean {
-    return datasetQuery.type === NATIVE_QUERY_TEMPLATE.type;
+    return datasetQuery && datasetQuery.type === NATIVE_QUERY_TEMPLATE.type;
   }
 
   /* Query superclass methods */
 
-  canRun() {
+  hasData() {
     return (
-      this.databaseId() != null &&
-      this.queryText().length > 0 &&
-      (!this.requiresTable() || this.collection())
+      this.databaseId() != null && (!this.requiresTable() || this.collection())
     );
+  }
+
+  canRun() {
+    return this.hasData() && this.queryText().length > 0;
   }
 
   isEmpty() {
