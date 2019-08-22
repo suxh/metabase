@@ -1,6 +1,5 @@
 (ns metabase.driver.bigquery-test
   (:require [clj-time.core :as time]
-            [expectations :refer [expect]]
             [honeysql.core :as hsql]
             [metabase
              [driver :as driver]
@@ -78,64 +77,14 @@
        :type     :native
        :database (data/id)})))
 
-;; make sure that the bigquery driver can handle named columns with characters that aren't allowed in BQ itself
-(datasets/expect-with-driver :bigquery
-  {:rows    [[113]]
-   :columns ["User_ID_Plus_Venue_ID"]}
-  (qp.test/rows+column-names
-    (qp/process-query {:database (data/id)
-                       :type     "query"
-                       :query    {:source-table (data/id :checkins)
-                                  :aggregation  [["named" ["max" ["+" ["field-id" (data/id :checkins :user_id)]
-                                                                      ["field-id" (data/id :checkins :venue_id)]]]
-                                                  "User ID Plus Venue ID"]]}})))
-
-;; ok, make sure we actually wrap all of our ag clauses in `:named` clauses with unique names
+;; ok, make sure we actually wrap all of our ag clauses in `:aggregation-options` clauses with unique names
 (defn- aggregation-names [query]
   (mbql.u/match (-> query :query :aggregation)
-    [:named _ ag-name] ag-name))
+    [:aggregation-options _ {:name ag-name}] ag-name))
 
-(defn- pre-alias-aggregations [outer-query]
-  (binding [driver/*driver* :bigquery]
-    (aggregation-names (#'bigquery/pre-alias-aggregations :bigquery outer-query))))
-
-(defn- query-with-aggregations
-  [aggregations]
-  {:database (data/id)
-   :type     :query
-   :query    {:source-table (data/id :venues)
-              :aggregation  aggregations}})
-
-;; make sure BigQuery can handle two aggregations with the same name (#4089)
-(expect
-  ["sum" "count" "sum_2" "avg" "sum_3" "min"]
-  (pre-alias-aggregations
-   (query-with-aggregations
-    [[:sum [:field-id (data/id :venues :id)]]
-     [:count [:field-id (data/id :venues :id)]]
-     [:sum [:field-id (data/id :venues :id)]]
-     [:avg [:field-id (data/id :venues :id)]]
-     [:sum [:field-id (data/id :venues :id)]]
-     [:min [:field-id (data/id :venues :id)]]])))
-
-(expect
-  ["sum" "count" "sum_2" "avg" "sum_2_2" "min"]
-  (pre-alias-aggregations
-   (query-with-aggregations
-    [[:sum [:field-id (data/id :venues :id)]]
-     [:count [:field-id (data/id :venues :id)]]
-     [:sum [:field-id (data/id :venues :id)]]
-     [:avg [:field-id (data/id :venues :id)]]
-     [:named [:sum [:field-id (data/id :venues :id)]] "sum_2"]
-     [:min [:field-id (data/id :venues :id)]]])))
-
-;; if query has no aggregations then pre-alias-aggregations should do nothing
-(expect
-  {}
-  (driver/with-driver :bigquery
-    (#'bigquery/pre-alias-aggregations :bigquery {})))
-
-
+;; make sure queries with two or more of the same aggregation type still work. Aggregations used to be deduplicated
+;; here in the BigQuery driver; now they are deduplicated as part of the main QP middleware, but no reason not to keep
+;; a few of these tests just to be safe
 (datasets/expect-with-driver :bigquery
   {:rows [[7929 7929]], :columns ["sum" "sum_2"]}
   (qp.test/rows+column-names

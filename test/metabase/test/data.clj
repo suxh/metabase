@@ -164,19 +164,28 @@
     (cond-> (mbql-query-impl/parse-tokens table-name outer-query)
       (not (:native outer-query)) (update :query mbql-query-impl/maybe-add-source-table table-name)))))
 
+(defmacro native-query
+  "Like `mbql-query`, but for native queries."
+  {:style/indent 0}
+  [inner-native-query]
+  `{:database (id)
+    :type     :native
+    :native   ~inner-native-query})
+
 (defmacro run-mbql-query
   "Like `mbql-query`, but runs the query as well."
   {:style/indent 1}
-  [table & [query]]
+  [table-name & [query]]
   `(qp/process-query
-     (mbql-query ~table ~(or query {}))))
+     (mbql-query ~table-name ~(or query {}))))
 
 (defn format-name
   "Format a SQL schema, table, or field identifier in the correct way for the current database by calling the driver's
   implementation of `format-name`. (Most databases use the default implementation of `identity`; H2 uses
   `clojure.string/upper-case`.) This function DOES NOT quote the identifier."
-  [nm]
-  (tx/format-name (tx/driver) (name nm)))
+  [a-name]
+  {:pre [((some-fn keyword? string? symbol?) a-name)]}
+  (tx/format-name (tx/driver) (name a-name)))
 
 (defn id
   "Get the ID of the current database or one of its Tables or Fields. Relies on the dynamic variable `*get-db*`, which
@@ -249,13 +258,6 @@
   (contains? (driver.u/features (tx/driver)) :binning))
 
 (defn id-field-type  [] (tx/id-field-type (tx/driver)))
-
-(defn expected-base-type->actual
-  "Return actual `base_type` that will be used for the given driver if we asked for BASE-TYPE. Mainly for Oracle
-  because it doesn't have `INTEGER` types and uses decimals instead."
-  [base-type]
-  (tx/expected-base-type->actual (tx/driver) base-type))
-
 
 ;; The functions below are used so infrequently they hardly belong in this namespace.
 

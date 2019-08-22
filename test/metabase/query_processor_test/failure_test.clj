@@ -16,13 +16,13 @@
               :fields       [["datetime_field" (data/id :venues :id) "MONTH"]]}})
 
 (defn- bad-query:preprocessed []
-  {:database (data/id)
-   :type     :query
-   :query    {:source-table (data/id :venues)
-              :fields       [[:datetime-field [:field-id (data/id :venues :id)] :month]]
-              :limit        qp.i/absolute-max-results}
-   :driver   :h2
-   :settings {}})
+  {:database            (data/id)
+   :type                :query
+   :query               {:source-table (data/id :venues)
+                         :fields       [[:datetime-field [:field-id (data/id :venues :id)] :month]]
+                         :limit        qp.i/absolute-max-results}
+   :preprocessing-level 1
+   :driver              :h2})
 
 (def ^:private bad-query:native
   {:query  (str "SELECT parsedatetime(formatdatetime(\"PUBLIC\".\"VENUES\".\"ID\", 'yyyyMM'), 'yyyyMM') AS \"ID\" "
