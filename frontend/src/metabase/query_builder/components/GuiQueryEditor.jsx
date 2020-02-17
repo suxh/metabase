@@ -5,14 +5,14 @@ import PropTypes from "prop-types";
 import ReactDOM from "react-dom";
 import { t } from "ttag";
 
-import AggregationWidget from "./AggregationWidget.jsx";
-import BreakoutWidget from "./BreakoutWidget.jsx";
-import ExtendedOptions from "./ExtendedOptions.jsx";
-import FilterWidgetList from "./filters/FilterWidgetList.jsx";
-import FilterPopover from "./filters/FilterPopover.jsx";
-import Icon from "metabase/components/Icon.jsx";
-import IconBorder from "metabase/components/IconBorder.jsx";
-import PopoverWithTrigger from "metabase/components/PopoverWithTrigger.jsx";
+import AggregationWidget from "./AggregationWidget";
+import BreakoutWidget from "./BreakoutWidget";
+import ExtendedOptions from "./ExtendedOptions";
+import FilterWidgetList from "./filters/FilterWidgetList";
+import FilterPopover from "./filters/FilterPopover";
+import Icon from "metabase/components/Icon";
+import IconBorder from "metabase/components/IconBorder";
+import PopoverWithTrigger from "metabase/components/PopoverWithTrigger";
 import { DatabaseSchemaAndTableDataSelector } from "metabase/query_builder/components/DataSelector";
 
 import cx from "classnames";
@@ -21,10 +21,7 @@ import _ from "underscore";
 import type { TableId } from "metabase/meta/types/Table";
 import type { DatabaseId } from "metabase/meta/types/Database";
 import type { DatasetQuery } from "metabase/meta/types/Card";
-import type {
-  TableMetadata,
-  DatabaseMetadata,
-} from "metabase/meta/types/Metadata";
+import type { DatabaseMetadata } from "metabase/meta/types/Metadata";
 import type { Children } from "react";
 
 import StructuredQuery from "metabase-lib/lib/queries/StructuredQuery";
@@ -46,15 +43,14 @@ type Props = {
   query: StructuredQuery,
 
   databases: DatabaseMetadata[],
-  tables: TableMetadata[],
 
   supportMultipleAggregations?: boolean,
 
-  setDatabaseFn: (id: DatabaseId) => void,
-  setSourceTableFn: (id: TableId) => void,
-  setDatasetQuery: (datasetQuery: DatasetQuery) => void,
+  setDatabaseFn?: (id: DatabaseId) => void,
+  setSourceTableFn?: (id: TableId) => void,
+  setDatasetQuery?: (datasetQuery: DatasetQuery) => void,
 
-  isShowingDataReference: boolean,
+  isShowingDataReference?: boolean,
 };
 
 type State = {
@@ -180,7 +176,7 @@ export default class GuiQueryEditor extends React.Component {
               isNew
               query={query}
               onChangeFilter={filter =>
-                query.addFilter(filter).update(setDatasetQuery)
+                query.filter(filter).update(setDatasetQuery)
               }
               onClose={() => this.refs.filterPopover.close()}
             />

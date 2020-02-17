@@ -5,7 +5,9 @@ import PropTypes from "prop-types";
 import ReactDOM from "react-dom";
 import "./TableInteractive.css";
 
-import Icon from "metabase/components/Icon.jsx";
+import Icon from "metabase/components/Icon";
+
+import ExternalLink from "metabase/components/ExternalLink";
 
 import { formatValue } from "metabase/lib/formatting";
 import { isID, isFK } from "metabase/lib/schema_metadata";
@@ -22,13 +24,13 @@ import Dimension from "metabase-lib/lib/Dimension";
 import _ from "underscore";
 import cx from "classnames";
 
-import ExplicitSize from "metabase/components/ExplicitSize.jsx";
+import ExplicitSize from "metabase/components/ExplicitSize";
 import MiniBar from "./MiniBar";
 
 // $FlowFixMe: had to ignore react-virtualized in flow, probably due to different version
 import { Grid, ScrollSync } from "react-virtualized";
 import Draggable from "react-draggable";
-import Ellipsified from "metabase/components/Ellipsified.jsx";
+import Ellipsified from "metabase/components/Ellipsified";
 
 const HEADER_HEIGHT = 36;
 const ROW_HEIGHT = 36;
@@ -68,6 +70,12 @@ type Props = VisualizationProps & {
   sort: any,
   isPivoted: boolean,
   onActionDismissal: () => void,
+  onContentWidthChange: (number, number[]) => void,
+  renderTableCellWrapper: any,
+  renderTableHeaderWrapper: any,
+  tableHeaderHeight: number,
+  getColumnTitle: number => string,
+  data: any,
 };
 type State = {
   columnWidths: number[],
@@ -400,11 +408,16 @@ export default class TableInteractive extends Component {
   @memoize
   getCellBackgroundColor(
     settings: VisualizationSettings,
+    value: Value,
     rowIndex: number,
-    columnIndex: number,
+    columnName: number,
   ) {
     try {
-      return settings["table._cell_background_getter"](rowIndex, columnIndex);
+      return settings["table._cell_background_getter"](
+        value,
+        rowIndex,
+        columnName,
+      );
     } catch (e) {
       console.error(e);
     }
@@ -412,13 +425,18 @@ export default class TableInteractive extends Component {
 
   // NOTE: all arguments must be passed to the memoized method, not taken from this.props etc
   @memoize
-  getCellFormattedValue(value: Value, columnSettings: any) {
+  getCellFormattedValue(
+    value: Value,
+    columnSettings: any,
+    clicked: ?ClickObject,
+  ) {
     try {
       return formatValue(value, {
         ...columnSettings,
         type: "cell",
         jsx: true,
         rich: true,
+        clicked: clicked,
       });
     } catch (e) {
       console.error(e);
@@ -434,15 +452,29 @@ export default class TableInteractive extends Component {
     const row = rows[rowIndex];
     const value = row[columnIndex];
 
+    const columnSettings = settings.column(column);
     const clicked = this.getCellClickedObject(rowIndex, columnIndex);
-    const isClickable = this.visualizationIsClickable(clicked);
-    const backgroundColor = this.getCellBackgroundColor(
-      settings,
-      rowIndex,
-      columnIndex,
+
+    const cellData = columnSettings["show_mini_bar"] ? (
+      <MiniBar
+        value={value}
+        options={columnSettings}
+        extent={getColumnExtent(data.cols, data.rows, columnIndex)}
+        cellHeight={ROW_HEIGHT}
+      />
+    ) : (
+      this.getCellFormattedValue(value, columnSettings, clicked)
+      /* using formatValue instead of <Value> here for performance. The later wraps in an extra <span> */
     );
 
-    const columnSettings = settings.column(column);
+    const isLink = cellData && cellData.type === ExternalLink;
+    const isClickable = !isLink && this.visualizationIsClickable(clicked);
+    const backgroundColor = this.getCellBackgroundColor(
+      settings,
+      value,
+      rowIndex,
+      column.name,
+    );
 
     return (
       <div
@@ -474,19 +506,7 @@ export default class TableInteractive extends Component {
             : undefined
         }
       >
-        {this.props.renderTableCellWrapper(
-          columnSettings["show_mini_bar"] ? (
-            <MiniBar
-              value={value}
-              options={columnSettings}
-              extent={getColumnExtent(data.cols, data.rows, columnIndex)}
-              cellHeight={ROW_HEIGHT}
-            />
-          ) : (
-            this.getCellFormattedValue(value, columnSettings)
-            /* using formatValue instead of <Value> here for performance. The later wraps in an extra <span> */
-          ),
-        )}
+        {this.props.renderTableCellWrapper(cellData)}
       </div>
     );
   };
@@ -530,6 +550,7 @@ export default class TableInteractive extends Component {
     const { dragColIndex, columnPositions } = this.state;
     const { cols } = this.props.data;
     const indexes = cols.map((col, index) => index);
+    // $FlowFixMe
     indexes.splice(dragColNewIndex, 0, indexes.splice(dragColIndex, 1)[0]);
     let left = 0;
     const lefts = indexes.map(index => {

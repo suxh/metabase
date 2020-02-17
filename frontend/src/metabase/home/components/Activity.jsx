@@ -1,14 +1,15 @@
 import React, { Component } from "react";
 import PropTypes from "prop-types";
 import { Link } from "react-router";
+
 import _ from "underscore";
 import { t } from "ttag";
 
-import colors from "metabase/lib/colors";
+import { color } from "metabase/lib/colors";
 
-import LoadingAndErrorWrapper from "metabase/components/LoadingAndErrorWrapper.jsx";
-import ActivityItem from "./ActivityItem.jsx";
-import ActivityStory from "./ActivityStory.jsx";
+import LoadingAndErrorWrapper from "metabase/components/LoadingAndErrorWrapper";
+import ActivityItem from "./ActivityItem";
+import ActivityStory from "./ActivityStory";
 
 import * as Urls from "metabase/lib/urls";
 
@@ -18,12 +19,12 @@ export default class Activity extends Component {
     this.state = { error: null, userColors: {} };
 
     this.colorClasses = [
-      colors["brand"],
-      colors["accent1"],
-      colors["accent2"],
-      colors["accent3"],
-      colors["accent4"],
-      colors["accent5"],
+      color("brand"),
+      color("accent1"),
+      color("accent2"),
+      color("accent3"),
+      color("accent4"),
+      color("accent5"),
     ];
   }
 
@@ -83,7 +84,7 @@ export default class Activity extends Component {
     } else if (user) {
       return user.first_name;
     } else {
-      return "Metabase";
+      return t`Metabase`;
     }
   }
 

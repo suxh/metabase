@@ -2,7 +2,7 @@ import React from "react";
 import PropTypes from "prop-types";
 import sys from "system-components";
 
-import Icon from "metabase/components/Icon.jsx";
+import Icon from "metabase/components/Icon";
 import cx from "classnames";
 import _ from "underscore";
 
@@ -41,7 +41,9 @@ const BaseButton = ({
   return (
     <button
       {..._.omit(props, ...BUTTON_VARIANTS)}
-      className={cx("Button", className, "flex-no-shrink", variantClasses)}
+      className={cx("Button", className, "flex-no-shrink", variantClasses, {
+        p1: !children,
+      })}
     >
       <div
         className={cx("flex layout-centered", { "flex-column": iconVertical })}

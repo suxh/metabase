@@ -21,7 +21,7 @@
             [metabase.query-processor.middleware.annotate :as annotate]
             [metabase.util
              [honeysql-extensions :as hx]
-             [i18n :refer [deferred-tru tru]]
+             [i18n :refer [deferred-tru]]
              [schema :as su]]
             [potemkin.types :as p.types]
             [pretty.core :refer [PrettyPrintable]]
@@ -60,15 +60,29 @@
 ;;; |                                            Interface (Multimethods)                                            |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
-(defmulti current-datetime-fn
-  "HoneySQL form that should be used to get the current `datetime` (or equivalent). Defaults to `:%now`."
+(defmulti ^{:deprecated "0.34.2"} current-datetime-fn
+  "HoneySQL form that should be used to get the current `datetime` (or equivalent). Defaults to `:%now`.
+
+  DEPRECATED: `current-datetime-fn` is a misnomer, since the result can actually be any valid HoneySQL form.
+  `current-datetime-honeysql-form` replaces this method; implement and call that method instead. This method will be
+  removed in favor of `current-datetime-honeysql-form` at some point in the future."
   {:arglists '([driver])}
   driver/dispatch-on-initialized-driver
   :hierarchy #'driver/hierarchy)
 
 (defmethod current-datetime-fn :sql [_] :%now)
 
+(defmulti current-datetime-honeysql-form
+  "HoneySQL form that should be used to get the current `datetime` (or equivalent). Defaults to `:%now`."
+  {:arglists '([driver])}
+  driver/dispatch-on-initialized-driver
+  :hierarchy #'driver/hierarchy)
 
+(defmethod current-datetime-honeysql-form :sql
+  [driver]
+  (current-datetime-fn driver))
+
+;; TODO - rename this to `date-bucket` or something that better describes what it actually does
 (defmulti date
   "Return a HoneySQL form for truncating a date or timestamp field or value to a given resolution, or extracting a date
   component."
@@ -79,6 +93,17 @@
 ;; default implementation for `:default` bucketing returns expression as-is
 (defmethod date [:sql :default] [_ _ expr] expr)
 
+
+(defmulti add-interval-honeysql-form
+  "Return a HoneySQL form that performs represents addition of some temporal interval to the original `hsql-form`.
+
+    (add-interval-honeysql-form :my-driver hsql-form 1 :day) -> (hsql/call :date_add hsql-form 1 (hx/literal 'day'))"
+  {:arglists '([driver hsql-form amount unit])}
+  driver/dispatch-on-initialized-driver
+  :hierarchy #'driver/hierarchy)
+
+(defmethod add-interval-honeysql-form :sql [driver hsql-form amount unit]
+  (driver/date-add driver hsql-form amount unit))
 
 (defmulti field->identifier
   "Return a HoneySQL form that should be used as the identifier for `field`, an instance of the Field model. The default
@@ -215,6 +240,22 @@
   (binding [*table-alias* alias]
     (->honeysql driver field)))
 
+;; (p.types/defrecord+ AtTimezone [expr timezone-id]
+;;   PrettyPrintable
+;;   (pretty [_]
+;;     (list 'at-timezone expr timezone-id))
+
+;;   hformat/ToSql
+;;   (to-sql [_]
+;;     (format "(%s at time zone '%s')" (hformat/to-sql expr) timezone-id)))
+
+;; (defn at-timezone
+;;   ([expr]
+;;    (at-timezone expr (qp.timezone/results-timezone-id)))
+
+;;   ([expr timezone-id]
+;;    (AtTimezone. expr timezone-id)))
+
 (defmethod ->honeysql [:sql :datetime-field]
   [driver [_ field unit]]
   (date driver unit (->honeysql driver field)))
@@ -250,8 +291,8 @@
 (defmethod ->honeysql [:sql :+] [driver [_ & args]]
   (if (mbql.u/datetime-arithmetics? args)
     (let [[field & intervals] args]
-      (reduce (fn [result [_ amount unit]]
-                (driver/date-add driver result amount unit))
+      (reduce (fn [hsql-form [_ amount unit]]
+                (add-interval-honeysql-form driver hsql-form amount unit))
               (->honeysql driver field)
               intervals))
     (apply hsql/call :+ (map (partial ->honeysql driver) args))))
@@ -264,16 +305,29 @@
 ;;
 ;; also, we want to gracefully handle situations where the column is ZERO and just swap it out with NULL instead, so
 ;; we don't get divide by zero errors. SQL DBs always return NULL when dividing by NULL (AFAIK)
+
+(defmulti ->float
+  "Cast to float"
+  {:arglists '([driver value])}
+  driver/dispatch-on-initialized-driver
+  :hierarchy #'driver/hierarchy)
+
+(defmethod ->float :sql
+  [_ value]
+  (hx/cast :float value))
+
 (defmethod ->honeysql [:sql :/]
   [driver [_ & args]]
-  (let [args (for [arg args]
-               (->honeysql driver (if (integer? arg)
-                                    (double arg)
-                                    arg)))]
-    (apply hsql/call :/ (first args) (for [arg (rest args)]
-                                       (hsql/call :case
-                                         (hsql/call := arg 0) nil
-                                         :else                arg)))))
+  (let [[numerator & denominators] (for [arg args]
+                                     (->honeysql driver (if (integer? arg)
+                                                          (double arg)
+                                                          arg)))]
+    (apply hsql/call :/
+           (->float driver numerator)
+           (for [denominator denominators]
+             (hsql/call :case
+               (hsql/call := denominator 0) nil
+               :else                        denominator)))))
 
 (defmethod ->honeysql [:sql :sum-where]
   [driver [_ arg pred]]
@@ -327,8 +381,8 @@
 (defmethod ->honeysql [:sql :relative-datetime]
   [driver [_ amount unit]]
   (date driver unit (if (zero? amount)
-                      (current-datetime-fn driver)
-                      (driver/date-add driver (current-datetime-fn driver) amount unit))))
+                      (current-datetime-honeysql-form driver)
+                      (add-interval-honeysql-form driver (current-datetime-honeysql-form driver) amount unit))))
 
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -428,45 +482,56 @@
   [value :- (s/constrained mbql.s/value #(string? (second %)) "string value"), f]
   (update value 1 f))
 
-(defmethod ->honeysql [:sql :starts-with] [driver [_ field value options]]
+(defmethod ->honeysql [:sql :starts-with]
+  [driver [_ field value options]]
   (like-clause driver (->honeysql driver field) (update-string-value value #(str % \%)) options))
 
-(defmethod ->honeysql [:sql :contains] [driver [_ field value options]]
+(defmethod ->honeysql [:sql :contains]
+  [driver [_ field value options]]
   (like-clause driver (->honeysql driver field) (update-string-value value #(str \% % \%)) options))
 
-(defmethod ->honeysql [:sql :ends-with] [driver [_ field value options]]
+(defmethod ->honeysql [:sql :ends-with]
+  [driver [_ field value options]]
   (like-clause driver (->honeysql driver field) (update-string-value value #(str \% %)) options))
 
-(defmethod ->honeysql [:sql :between] [driver [_ field min-val max-val]]
+(defmethod ->honeysql [:sql :between]
+  [driver [_ field min-val max-val]]
   [:between (->honeysql driver field) (->honeysql driver min-val) (->honeysql driver max-val)])
 
-
-(defmethod ->honeysql [:sql :>] [driver [_ field value]]
+(defmethod ->honeysql [:sql :>]
+  [driver [_ field value]]
   [:> (->honeysql driver field) (->honeysql driver value)])
 
-(defmethod ->honeysql [:sql :<] [driver [_ field value]]
+(defmethod ->honeysql [:sql :<]
+  [driver [_ field value]]
   [:< (->honeysql driver field) (->honeysql driver value)])
 
-(defmethod ->honeysql [:sql :>=] [driver [_ field value]]
+(defmethod ->honeysql [:sql :>=]
+  [driver [_ field value]]
   [:>= (->honeysql driver field) (->honeysql driver value)])
 
-(defmethod ->honeysql [:sql :<=] [driver [_ field value]]
+(defmethod ->honeysql [:sql :<=]
+  [driver [_ field value]]
   [:<= (->honeysql driver field) (->honeysql driver value)])
 
-(defmethod ->honeysql [:sql :=] [driver [_ field value]]
+(defmethod ->honeysql [:sql :=]
+  [driver [_ field value]]
   [:= (->honeysql driver field) (->honeysql driver value)])
 
-(defmethod ->honeysql [:sql :!=] [driver [_ field value]]
+(defmethod ->honeysql [:sql :!=]
+  [driver [_ field value]]
   [:not= (->honeysql driver field) (->honeysql driver value)])
 
-
-(defmethod ->honeysql [:sql :and] [driver [_ & subclauses]]
+(defmethod ->honeysql [:sql :and]
+  [driver [_ & subclauses]]
   (apply vector :and (map (partial ->honeysql driver) subclauses)))
 
-(defmethod ->honeysql [:sql :or] [driver [_ & subclauses]]
+(defmethod ->honeysql [:sql :or]
+  [driver [_ & subclauses]]
   (apply vector :or (map (partial ->honeysql driver) subclauses)))
 
-(defmethod ->honeysql [:sql :not] [driver [_ subclause]]
+(defmethod ->honeysql [:sql :not]
+  [driver [_ subclause]]
   [:not (->honeysql driver subclause)])
 
 (defmethod apply-top-level-clause [:sql :filter]
@@ -597,6 +662,7 @@
 
 (defn format-honeysql
   "Convert `honeysql-form` to a vector of SQL string and params, like you'd pass to JDBC."
+  {:style/indent 1}
   [driver honeysql-form]
   (try
     (binding [hformat/*subquery?* false]
@@ -689,7 +755,7 @@
   [driver, {inner-query :query} :- su/Map]
   (u/prog1 (apply-clauses driver {} inner-query)
     (when-not i/*disable-qp-logging*
-      (log/debug (tru "HoneySQL Form:") (u/emoji "🍯") "\n" (u/pprint-to-str 'cyan <>)))))
+      (log/tracef "\nHoneySQL Form: %s\n%s" (u/emoji "🍯") (u/pprint-to-str 'cyan <>)))))
 
 
 ;;; +----------------------------------------------------------------------------------------------------------------+

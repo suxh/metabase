@@ -2,18 +2,19 @@ import React, { Component } from "react";
 import ReactDOM from "react-dom";
 import PropTypes from "prop-types";
 
+import { PLUGIN_ADMIN_NAV_ITEMS } from "metabase/plugins";
+
 import { connect } from "react-redux";
 import { push } from "react-router-redux";
 
 import cx from "classnames";
 import { t } from "ttag";
-import { Flex } from "grid-styled";
+import { Flex, Box } from "grid-styled";
 import styled from "styled-components";
 import { space } from "styled-system";
-import color from "color";
 
 import * as Urls from "metabase/lib/urls";
-import colors, { darken } from "metabase/lib/colors";
+import { color, darken, lighten } from "metabase/lib/colors";
 
 import Icon, { IconWrapper } from "metabase/components/Icon";
 import Link from "metabase/components/Link";
@@ -61,12 +62,13 @@ const AdminNavItem = ({ name, path, currentPath }) => (
   </li>
 );
 
-const DefaultSearchColor = color(colors.brand)
-  .lighten(0.07)
-  .string();
-const ActiveSearchColor = color(colors.brand)
-  .lighten(0.1)
-  .string();
+const DefaultSearchColor = lighten(color("nav"), 0.07);
+const ActiveSearchColor = lighten(color("nav"), 0.1);
+
+const NavHover = {
+  backgroundColor: darken(color("nav")),
+  color: "white",
+};
 
 const SearchWrapper = Flex.extend`
   background-color: ${props =>
@@ -93,7 +95,7 @@ const SearchInput = styled.input`
     outline: none;
   }
   &::placeholder {
-    color: ${colors["text-white"]};
+    color: ${color("text-white")};
   }
 `;
 
@@ -227,31 +229,45 @@ export default class Navbar extends Component {
               name={t`Settings`}
               path="/admin/settings"
               currentPath={this.props.path}
+              key="admin-nav-settings"
             />
             <AdminNavItem
               name={t`People`}
               path="/admin/people"
               currentPath={this.props.path}
+              key="admin-nav-people"
             />
             <AdminNavItem
               name={t`Data Model`}
               path="/admin/datamodel"
               currentPath={this.props.path}
+              key="admin-nav-datamodel"
             />
             <AdminNavItem
               name={t`Databases`}
               path="/admin/databases"
               currentPath={this.props.path}
+              key="admin-nav-databases"
             />
             <AdminNavItem
               name={t`Permissions`}
               path="/admin/permissions"
               currentPath={this.props.path}
+              key="admin-nav-permissions"
             />
+            {PLUGIN_ADMIN_NAV_ITEMS.map(({ name, path }) => (
+              <AdminNavItem
+                name={name}
+                path={path}
+                currentPath={this.props.path}
+                key={`admin-nav-${name}`}
+              />
+            ))}
             <AdminNavItem
               name={t`Troubleshooting`}
               path="/admin/troubleshooting"
               currentPath={this.props.path}
+              key="admin-nav-troubleshooting"
             />
           </ul>
 
@@ -292,23 +308,36 @@ export default class Navbar extends Component {
         // TODO: hide nav using state in redux instead?
         className="Nav relative bg-brand text-white z3 flex-no-shrink"
         align="center"
+        style={{ backgroundColor: color("nav") }}
         py={1}
         pr={2}
       >
-        <Link
-          to="/"
-          data-metabase-event={"Navbar;Logo"}
-          className="relative cursor-pointer z2 rounded flex justify-center transition-background"
-          p={1}
-          mx={1}
-          hover={{ backgroundColor: DefaultSearchColor }}
-        >
-          <LogoIcon dark />
-        </Link>
-        <SearchBar
-          location={this.props.location}
-          onChangeLocation={this.props.onChangeLocation}
-        />
+        <Flex style={{ minWidth: 64 }} align="center" justify="center">
+          <Link
+            to="/"
+            data-metabase-event={"Navbar;Logo"}
+            className="relative cursor-pointer z2 rounded flex justify-center transition-background"
+            p={1}
+            mx={1}
+            hover={{ backgroundColor: DefaultSearchColor }}
+          >
+            <Flex
+              style={{ minWidth: 32, height: 32 }}
+              align="center"
+              justify="center"
+            >
+              <LogoIcon dark height={32} />
+            </Flex>
+          </Link>
+        </Flex>
+        <Flex className="flex-full z1" pr={2} align="center">
+          <Box w={1} style={{ maxWidth: 500 }}>
+            <SearchBar
+              location={this.props.location}
+              onChangeLocation={this.props.onChangeLocation}
+            />
+          </Box>
+        </Flex>
         <Flex ml="auto" align="center" pl={[1, 2]} className="relative z2">
           {hasDataAccess && (
             <Link
@@ -316,7 +345,7 @@ export default class Navbar extends Component {
               to={Urls.newQuestionFlow()}
               p={1}
               hover={{
-                backgroundColor: darken(colors["brand"]),
+                backgroundColor: darken(color("brand")),
               }}
               className="flex align-center rounded transition-background"
               data-metabase-event={`NavBar;New Question`}
@@ -333,7 +362,7 @@ export default class Navbar extends Component {
               className="flex align-center rounded transition-background"
               data-metabase-event={`NavBar;Data Browse`}
               hover={{
-                backgroundColor: darken(colors["brand"]),
+                backgroundColor: darken(color("brand")),
               }}
             >
               <Icon name="table_spaced" size={14} />
@@ -344,6 +373,7 @@ export default class Navbar extends Component {
             tooltip={t`Create`}
             className="hide sm-show mr1"
             triggerIcon="add"
+            triggerProps={{ hover: NavHover }}
             items={[
               {
                 title: t`New dashboard`,
@@ -360,7 +390,10 @@ export default class Navbar extends Component {
             ]}
           />
           {hasNativeWrite && (
-            <IconWrapper className="relative hide sm-show mr1 overflow-hidden">
+            <IconWrapper
+              className="relative hide sm-show mr1 overflow-hidden"
+              hover={NavHover}
+            >
               <Link
                 to={this.props.plainNativeQuery.question().getUrl()}
                 className="flex align-center"

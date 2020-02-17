@@ -10,9 +10,11 @@ import Field from "./Field";
 import type { SchemaName } from "metabase/meta/types/Table";
 import type { FieldMetadata } from "metabase/meta/types/Metadata";
 
-import { titleize, humanize } from "metabase/lib/formatting";
+import { titleize, singularize, humanize } from "metabase/lib/formatting";
 
 import Dimension from "../Dimension";
+
+import type StructuredQuery from "metabase-lib/lib/queries/StructuredQuery";
 
 type EntityType = string; // TODO: move somewhere central
 
@@ -39,13 +41,26 @@ export default class Table extends Base {
   }
 
   newQuestion(): Question {
+    return this.question()
+      .setDefaultQuery()
+      .setDefaultDisplay();
+  }
+
+  question(): Question {
     return Question.create({
       databaseId: this.db.id,
       tableId: this.id,
       metadata: this.metadata,
-    })
-      .setDefaultQuery()
-      .setDefaultDisplay();
+    });
+  }
+
+  query(query = {}): StructuredQuery {
+    return (
+      this.question()
+        .query()
+        // $FlowFixMe: we know question returns a StructuredQuery but flow doesn't
+        .updateQuery(q => ({ ...q, ...query }))
+    );
   }
 
   dimensions(): Dimension[] {
@@ -60,15 +75,24 @@ export default class Table extends Base {
     );
   }
 
+  /**
+   * The singular form of the object type this table represents
+   * Currently we try to guess this by singularizing `display_name`, but ideally it would be configurable in metadata
+   * See also `field.targetObjectName()`
+   */
+  objectName() {
+    return singularize(this.displayName());
+  }
+
   dateFields(): Field[] {
     return this.fields.filter(field => field.isDate());
   }
 
-  aggregations() {
-    return this.aggregation_options || [];
+  aggregationOperators() {
+    return this.aggregation_operators || [];
   }
 
   aggregation(agg) {
-    return _.findWhere(this.aggregations(), { short: agg });
+    return _.findWhere(this.aggregationOperators(), { short: agg });
   }
 }

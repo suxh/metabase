@@ -1,21 +1,5 @@
 /* @flow weak */
 
-import Scalar from "./visualizations/Scalar.jsx";
-import SmartScalar from "./visualizations/SmartScalar.jsx";
-import Progress from "./visualizations/Progress.jsx";
-import Table from "./visualizations/Table.jsx";
-import Text from "./visualizations/Text.jsx";
-import LineChart from "./visualizations/LineChart.jsx";
-import BarChart from "./visualizations/BarChart.jsx";
-import RowChart from "./visualizations/RowChart.jsx";
-import PieChart from "./visualizations/PieChart.jsx";
-import AreaChart from "./visualizations/AreaChart.jsx";
-import ComboChart from "./visualizations/ComboChart.jsx";
-import MapViz from "./visualizations/Map.jsx";
-import ScatterPlot from "./visualizations/ScatterPlot.jsx";
-import Funnel from "./visualizations/Funnel.jsx";
-import Gauge from "./visualizations/Gauge.jsx";
-import ObjectDetail from "./visualizations/ObjectDetail.jsx";
 import { t } from "ttag";
 import _ from "underscore";
 
@@ -25,8 +9,23 @@ const visualizations = new Map();
 const aliases = new Map();
 // $FlowFixMe
 visualizations.get = function(key) {
-  return Map.prototype.get.call(this, key) || aliases.get(key) || Table;
+  return (
+    Map.prototype.get.call(this, key) ||
+    aliases.get(key) ||
+    defaultVisualization
+  );
 };
+
+export function getSensibleDisplays(data) {
+  return Array.from(visualizations)
+    .filter(([, viz]) => viz.isSensible && viz.isSensible(data))
+    .map(([display]) => display);
+}
+
+let defaultVisualization;
+export function setDefaultVisualization(visualization) {
+  defaultVisualization = visualization;
+}
 
 export function registerVisualization(visualization) {
   if (visualization == null) {
@@ -112,6 +111,13 @@ const extractRemappedColumns = data => {
     row.filter((value, colIndex) => {
       const col = cols[colIndex];
       if (col.remapped_from != null) {
+        if (
+          !cols[col.remapped_from_index] ||
+          !cols[col.remapped_from_index].remapping
+        ) {
+          console.warn("Invalid remapped_from", col);
+          return true;
+        }
         cols[col.remapped_from_index].remapped_to_column = col;
         cols[col.remapped_from_index].remapping.set(
           row[col.remapped_from_index],
@@ -129,22 +135,5 @@ const extractRemappedColumns = data => {
     cols: cols.filter(col => col.remapped_from == null),
   };
 };
-
-registerVisualization(Scalar);
-registerVisualization(SmartScalar);
-registerVisualization(Progress);
-registerVisualization(Gauge);
-registerVisualization(Table);
-registerVisualization(Text);
-registerVisualization(LineChart);
-registerVisualization(AreaChart);
-registerVisualization(BarChart);
-registerVisualization(ComboChart);
-registerVisualization(RowChart);
-registerVisualization(ScatterPlot);
-registerVisualization(PieChart);
-registerVisualization(MapViz);
-registerVisualization(Funnel);
-registerVisualization(ObjectDetail);
 
 export default visualizations;

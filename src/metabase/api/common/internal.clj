@@ -10,7 +10,8 @@
             [metabase.util
              [i18n :as ui18n :refer [tru]]
              [schema :as su]]
-            [schema.core :as s]))
+            [schema.core :as s])
+  (:import clojure.core.async.impl.channels.ManyToManyChannel))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                              DOCSTRING GENERATION                                              |
@@ -33,8 +34,8 @@
   [form]
   (cond
     (map? form) (args-form-flatten (mapcat (fn [[k v]]
-                                          [(args-form-flatten k) (args-form-flatten v)])
-                                        form))
+                                             [(args-form-flatten k) (args-form-flatten v)])
+                                           form))
     (sequential? form) (mapcat args-form-flatten form)
     :else       [form]))
 
@@ -59,7 +60,7 @@
           (log/warn
            (u/format-color 'red (str "We don't have a nice error message for schema: %s\n"
                                      "Consider wrapping it in `su/with-api-error-message`.")
-             (u/pprint-to-str schema)))))))
+                           (u/pprint-to-str schema)))))))
 
 (defn- param-name
   "Return the appropriate name for this PARAM-SYMB based on its SCHEMA. Usually this is just the name of the
@@ -113,7 +114,7 @@
   [^String value]
   (try (Integer/parseInt value)
        (catch NumberFormatException _
-         (throw (ui18n/ex-info (tru "Not a valid integer: ''{0}''" value) {:status-code 400})))))
+         (throw (ex-info (tru "Not a valid integer: ''{0}''" value) {:status-code 400})))))
 
 (def ^:dynamic *auto-parse-types*
   "Map of `param-type` -> map with the following keys:
@@ -220,7 +221,7 @@
   [field-name value schema]
   (try (s/validate schema value)
        (catch Throwable e
-         (throw (ui18n/ex-info (tru "Invalid field: {0}" field-name)
+         (throw (ex-info (tru "Invalid field: {0}" field-name)
                   {:status-code 400
                    :errors      {(keyword field-name) (or (su/api-error-message schema)
                                                           (:message (ex-data e))
@@ -259,5 +260,7 @@
            (contains? response :status)
            (contains? response :body))
     response
-    {:status 200
+    {:status (if (instance? ManyToManyChannel response)
+               202
+               200)
      :body   response}))

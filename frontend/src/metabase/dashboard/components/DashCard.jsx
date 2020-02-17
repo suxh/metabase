@@ -6,15 +6,15 @@ import visualizations, { getVisualizationRaw } from "metabase/visualizations";
 import Visualization, {
   ERROR_MESSAGE_GENERIC,
   ERROR_MESSAGE_PERMISSION,
-} from "metabase/visualizations/components/Visualization.jsx";
+} from "metabase/visualizations/components/Visualization";
 import QueryDownloadWidget from "metabase/query_builder/components/QueryDownloadWidget";
 
-import ModalWithTrigger from "metabase/components/ModalWithTrigger.jsx";
-import { ChartSettingsWithState } from "metabase/visualizations/components/ChartSettings.jsx";
+import ModalWithTrigger from "metabase/components/ModalWithTrigger";
+import { ChartSettingsWithState } from "metabase/visualizations/components/ChartSettings";
 
-import Icon from "metabase/components/Icon.jsx";
+import Icon from "metabase/components/Icon";
 
-import DashCardParameterMapper from "./DashCardParameterMapper.jsx";
+import DashCardParameterMapper from "./DashCardParameterMapper";
 
 import { IS_EMBED_PREVIEW } from "metabase/lib/embed";
 
@@ -74,6 +74,7 @@ export default class DashCard extends Component {
       metadata,
       dashboard,
       parameterValues,
+      mode,
     } = this.props;
 
     const mainCard = {
@@ -190,6 +191,7 @@ export default class DashCard extends Component {
             )
           }
           metadata={metadata}
+          mode={mode}
           onChangeCardAndRun={
             navigateToNewCardFromDashboard
               ? ({ nextCard, previousCard }) => {
@@ -202,6 +204,7 @@ export default class DashCard extends Component {
                 }
               : null
           }
+          onChangeLocation={this.props.onChangeLocation}
         />
       </div>
     );
@@ -242,6 +245,7 @@ const ChartSettingsButton = ({ series, onReplaceAllVisualizationSettings }) => (
     triggerClasses="text-light text-medium-hover cursor-pointer flex align-center flex-no-shrink mr1 drag-disabled"
   >
     <ChartSettingsWithState
+      className="spread"
       series={series}
       onChange={onReplaceAllVisualizationSettings}
       isDashboard

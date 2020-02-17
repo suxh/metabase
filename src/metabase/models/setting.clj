@@ -32,6 +32,7 @@
   (:require [cheshire.core :as json]
             [clojure
              [core :as core]
+             [data :as data]
              [string :as str]]
             [clojure.data.csv :as csv]
             [clojure.tools.logging :as log]
@@ -42,7 +43,7 @@
              [util :as u]]
             [metabase.models.setting.cache :as cache]
             [metabase.util
-             [date :as du]
+             [date-2 :as u.date]
              [i18n :as ui18n :refer [deferred-trs deferred-tru trs tru]]]
             [schema.core :as s]
             [toucan
@@ -63,6 +64,9 @@
 (def ^:private Type
   (s/enum :string :boolean :json :integer :double :timestamp :csv))
 
+(def ^:private Visibility
+  (s/enum :public :authenticated :admin :internal))
+
 (def ^:private default-tag-for-type
   "Type tag that will be included in the Setting's metadata, so that the getter function will not cause reflection
   warnings."
@@ -70,7 +74,7 @@
    :boolean   Boolean
    :integer   Long
    :double    Double
-   :timestamp java.sql.Timestamp})
+   :timestamp java.time.temporal.Temporal})
 
 (def ^:private SettingDefinition
   {:name        s/Keyword
@@ -81,8 +85,13 @@
    :setter      clojure.lang.IFn
    :tag         (s/maybe Class)  ; type annotation, e.g. ^String, to be applied. Defaults to tag based on :type
    :sensitive?  s/Bool           ; is this sensitive (never show in plaintext), like a password? (default: false)
-   :internal?   s/Bool           ; should the API never return this setting? (default: false)
-   :cache?      s/Bool})         ; should the getter always fetch this value "fresh" from the DB? (default: false)
+   :visibility  Visibility       ; where this setting should be visible (default: :admin)
+   :cache?      s/Bool           ; should the getter always fetch this value "fresh" from the DB? (default: false)
+
+  ;; called whenever setting value changes, whether from update-setting! or a cache refresh. used to handle cases
+  ;; where a change to the cache necessitates a change to some value outside the cache, like when a change the
+  ;; `:site-locale` setting requires a call to `java.util.Locale/setDefault`
+  :on-change   (s/maybe clojure.lang.IFn)})
 
 
 (defonce ^:private registered-settings
@@ -97,6 +106,18 @@
           (throw (Exception.
                   (tru "Setting {0} does not exist.\nFound: {1}" k (sort (keys @registered-settings)))))))))
 
+
+(defn- call-on-change
+  "Cache watcher that applies `:on-change` callback for all settings that have changed."
+  [_key _ref old new]
+  (let [rs      @registered-settings
+        [d1 d2] (data/diff old new)]
+    (doseq [changed-setting (into (set (keys d1))
+                                  (set (keys d2)))]
+      (when-let [on-change (get-in rs [(keyword changed-setting) :on-change])]
+        (on-change (clojure.core/get old changed-setting) (clojure.core/get new changed-setting))))))
+
+(add-watch @#'cache/cache* :call-on-change call-on-change)
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                                      get                                                       |
@@ -186,7 +207,7 @@
 (defn get-timestamp
   "Get the string value of `setting-or-name` and parse it as an ISO-8601-formatted string, returning a Timestamp."
   [setting-or-name]
-  (du/->Timestamp (get-string setting-or-name) :no-timezone))
+  (u.date/parse (get-string setting-or-name)))
 
 (defn get-csv
   "Get the string value of `setting-or-name` and parse it as CSV, returning a sequence of exploded strings."
@@ -262,7 +283,7 @@
     (if obfuscated?
       (log/info (trs "Attempted to set Setting {0} to obfuscated value. Ignoring change." setting-name))
       (do
-        (cache/restore-cache-if-needed!)
+        (cache/restore-cache!)
         ;; write to DB
         (cond
           (nil? new-value)
@@ -316,13 +337,14 @@
 
 (defn set-json!
   "Serialize `new-value` for `setting-or-name` as a JSON string and save it."
+  {:style/indent 1}
   [setting-or-name new-value]
   (set-string! setting-or-name (some-> new-value json/generate-string)))
 
 (defn set-timestamp!
   "Serialize `new-value` for `setting-or-name` as a ISO 8601-encoded timestamp string and save it."
   [setting-or-name new-value]
-  (set-string! setting-or-name (some-> new-value du/date->iso-8601)))
+  (set-string! setting-or-name (some-> new-value u.date/format)))
 
 (defn- serialize-csv [value]
   (cond
@@ -363,7 +385,10 @@
 
      (mandrill-api-key \"xyz123\")"
   [setting-or-name new-value]
-  (let [{:keys [setter cache?]} (resolve-setting setting-or-name)]
+  (let [{:keys [setter cache?], :as setting} (resolve-setting setting-or-name)
+        name                                 (setting-name setting)]
+    (when (= setter :none)
+      (throw (UnsupportedOperationException. (tru "You cannot set {0}; it is a read-only setting." name))))
     (binding [*disable-cache* (not cache?)]
       (setter new-value))))
 
@@ -382,10 +407,11 @@
                :description nil
                :type        setting-type
                :default     default
+               :on-change   nil
                :getter      (partial (default-getter-for-type setting-type) setting-name)
                :setter      (partial (default-setter-for-type setting-type) setting-name)
                :tag         (default-tag-for-type setting-type)
-               :internal?   false
+               :visibility  :admin
                :sensitive?  false
                :cache?      true}
                     (dissoc setting :name :type :default)))
@@ -462,7 +488,7 @@
   (when-not (or (valid-trs-or-tru? desc)
                 (valid-str-of-trs-or-tru? desc))
     (throw (IllegalArgumentException.
-             (trs "defsetting descriptions strings must be `:internal?` or internationalized, found: `{0}`"
+             (trs "defsetting descriptions strings must have `:visibilty` `:internal`, `:setter` `:none`, or internationalized, found: `{0}`"
                   (pr-str desc)))))
   desc)
 
@@ -486,17 +512,16 @@
                       Settings have special default getters and setters that automatically coerce values to the correct
                       types.
 
-   *  `:internal?`  - This Setting is for internal use and shouldn't be exposed in the UI (i.e., not returned by the
-                      corresponding endpoints). Default: `false`
+   *  `:visibility` - `:public`, `:authenticated`, `:admin` (default), or :internal. Controls where this setting is visible
 
    *  `:getter`     - A custom getter fn, which takes no arguments. Overrides the default implementation. (This can in
                       turn call functions in this namespace like `get-string` or `get-boolean` to invoke the default
                       getter behavior.)
 
-   *  `:setter`     - A custom setter fn, which takes a single argument. Overrides the default implementation. (This
-                      can in turn call functions in this namespace like `set-string!` or `set-boolean!` to invoke the
-                      default setter behavior. Keep in mind that the custom setter may be passed `nil`, which should
-                      clear the values of the Setting.)
+   *  `:setter`     - A custom setter fn, which takes a single argument, or `:none` for read-only settings. Overrides the
+                      default implementation. (This can in turn call functions in this namespace like `set-string!` or
+                      `set-boolean!` to invoke the default setter behavior. Keep in mind that the custom setter may be
+                      passed `nil`, which should clear the values of the Setting.)
 
    *  `:cache?`     - Should this Setting be cached? (default `true`)? Be careful when disabling this, because it could
                       have a very negative performance impact.
@@ -509,7 +534,8 @@
   {:style/indent 1}
   [setting-symb description & {:as options}]
   {:pre [(symbol? setting-symb)]}
-  `(let [desc# ~(if (:internal? options)
+  `(let [desc# ~(if (or (= (:visibility options) :internal)
+                        (= (:setter options) :none))
                   description
                   (validate-description description))
          setting# (register-setting! (assoc ~options
@@ -557,7 +583,7 @@
     convert the setting to the appropriate type; you can use `get-string` to get all string values of Settings, for
     example."
   [setting-or-name & {:keys [getter], :or {getter get}}]
-  (let [{:keys [sensitive? default], k :name, :as setting} (resolve-setting setting-or-name)
+  (let [{:keys [sensitive? visibility default], k :name, :as setting} (resolve-setting setting-or-name)
         unparsed-value                                     (get-string k)
         parsed-value                                       (getter k)
         ;; `default` and `env-var-value` are probably still in serialized form so compare
@@ -569,6 +595,9 @@
       ;; the UI.
       (or value-is-default? value-is-from-env-var?)
       nil
+
+      (= visibility :internal)
+      (throw (Exception. (tru "Setting {0} is internal" k)))
 
       sensitive?
       (obfuscate-value parsed-value)
@@ -594,5 +623,14 @@
 
    `options` are passed to `user-facing-value`."
   [& {:as options}]
-  (for [setting (sort-by :name (vals @registered-settings))]
+  (for [setting (sort-by :name (vals @registered-settings)) :when (not= (:visibility setting) :internal)]
     (m/mapply user-facing-info setting options)))
+
+(defn properties
+  "Returns settings values for a given :visibility"
+  [visibility]
+  (->> @registered-settings
+    (filter (fn [[_ options]] (and (not (:sensitive? options))
+                                   (= (:visibility options) visibility))))
+    (map (fn [[name]] [name (get name)]))
+    (into {})))

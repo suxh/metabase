@@ -4,8 +4,8 @@ import cx from "classnames";
 import _ from "underscore";
 import { t, jt } from "ttag";
 
-import Breadcrumbs from "metabase/components/Breadcrumbs.jsx";
-import InputBlurChange from "metabase/components/InputBlurChange.jsx";
+import Breadcrumbs from "metabase/components/Breadcrumbs";
+import InputBlurChange from "metabase/components/InputBlurChange";
 
 export default class SettingsSingleSignOnForm extends Component {
   constructor(props, context) {
@@ -126,9 +126,12 @@ export default class SettingsSingleSignOnForm extends Component {
                 href="https://developers.google.com/identity/sign-in/web/devconsole-project"
                 target="_blank"
               >
-                here.
+                here
               </a>
-            )}`}
+            )}.`}
+          </p>
+          <p className="text-medium">
+            {t`Be sure to include the full client ID, including the apps.googleusercontent.com suffix.`}
           </p>
           <InputBlurChange
             className="SettingsInput AdminInput bordered rounded h3"

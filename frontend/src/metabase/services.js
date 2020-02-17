@@ -157,9 +157,24 @@ export const MetabaseApi = {
       // HACK: inject GA metadata that we don't have intergrated on the backend yet
       if (table && table.db && table.db.engine === "googleanalytics") {
         const GA = await getGAMetadata();
-        table.fields = table.fields.map(f => ({ ...f, ...GA.fields[f.name] }));
-        table.metrics.push(...GA.metrics);
-        table.segments.push(...GA.segments);
+        table.fields = table.fields.map(field => ({
+          ...field,
+          ...GA.fields[field.name],
+        }));
+        table.metrics.push(
+          ...GA.metrics.map(metric => ({
+            ...metric,
+            table_id: table.id,
+            googleAnalyics: true,
+          })),
+        );
+        table.segments.push(
+          ...GA.segments.map(segment => ({
+            ...segment,
+            table_id: table.id,
+            googleAnalyics: true,
+          })),
+        );
       }
 
       if (table && table.fields) {
@@ -197,6 +212,12 @@ export const MetabaseApi = {
   dataset: POST("/api/dataset"),
   dataset_duration: POST("/api/dataset/duration"),
   native: POST("/api/dataset/native"),
+
+  // to support audit app  allow the endpoint to be provided in the query
+  datasetEndpoint: POST("/api/:endpoint", {
+    // this prevents the `endpoint` parameter from being URL encoded
+    raw: { endpoint: true },
+  }),
 };
 
 export const PulseApi = {
@@ -303,6 +324,7 @@ export const UtilApi = {
   password_check: POST("/api/util/password_check"),
   random_token: GET("/api/util/random_token"),
   logs: GET("/api/util/logs"),
+  bug_report_details: GET("/api/util/bug_report_details"),
 };
 
 export const GeoJSONApi = {

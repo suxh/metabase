@@ -3,13 +3,14 @@
 import React, { Component } from "react";
 
 import TableInteractive from "../components/TableInteractive.jsx";
-import TableSimple from "../components/TableSimple.jsx";
+import TableSimple from "../components/TableSimple";
 import { t } from "ttag";
 import * as DataGrid from "metabase/lib/data_grid";
 import { findColumnIndexForColumnSetting } from "metabase/lib/dataset";
 import { getOptionFromColumn } from "metabase/visualizations/lib/settings/utils";
 import { getColumnCardinality } from "metabase/visualizations/lib/utils";
 import { formatColumn } from "metabase/lib/formatting";
+import { PLUGIN_TABLE_COLUMN_SETTINGS } from "metabase/plugins";
 
 import * as Q_DEPRECATED from "metabase/lib/query";
 import {
@@ -22,10 +23,11 @@ import {
   isImageURL,
   isAvatarURL,
 } from "metabase/lib/schema_metadata";
-import ChartSettingOrderedColumns from "metabase/visualizations/components/settings/ChartSettingOrderedColumns.jsx";
+
+import ChartSettingOrderedColumns from "metabase/visualizations/components/settings/ChartSettingOrderedColumns";
 import ChartSettingsTableFormatting, {
   isFormattable,
-} from "metabase/visualizations/components/settings/ChartSettingsTableFormatting.jsx";
+} from "metabase/visualizations/components/settings/ChartSettingsTableFormatting";
 
 import { makeCellBackgroundGetter } from "metabase/visualizations/lib/table_format";
 import { columnSettings } from "metabase/visualizations/lib/settings/column";
@@ -130,7 +132,7 @@ export default class Table extends Component {
         // available, we fall back to the last column in the unpivoted table
         const nonPivotCols = data.cols.filter(c => c.name !== pivotCol);
         const lastCol = nonPivotCols[nonPivotCols.length - 1];
-        const { name } = nonPivotCols.find(isMetric) || lastCol;
+        const { name } = nonPivotCols.find(isMetric) || lastCol || {};
         return name;
       },
       getProps: (
@@ -176,6 +178,7 @@ export default class Table extends Component {
       ]) =>
         cols.map(col => ({
           name: col.name,
+          fieldRef: col.field_ref,
           enabled: col.visibility_type !== "details-only",
         })),
       getProps: ([
@@ -283,6 +286,11 @@ export default class Table extends Component {
           settings["view_as"] !== "email_link",
       };
     }
+
+    for (const getSettings of PLUGIN_TABLE_COLUMN_SETTINGS) {
+      Object.assign(settings, getSettings(column));
+    }
+
     return settings;
   };
 

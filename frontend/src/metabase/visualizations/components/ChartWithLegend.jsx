@@ -1,10 +1,10 @@
 import React, { Component } from "react";
 import styles from "./ChartWithLegend.css";
 
-import LegendVertical from "./LegendVertical.jsx";
-import LegendHorizontal from "./LegendHorizontal.jsx";
+import LegendVertical from "./LegendVertical";
+import LegendHorizontal from "./LegendHorizontal";
 
-import ExplicitSize from "metabase/components/ExplicitSize.jsx";
+import ExplicitSize from "metabase/components/ExplicitSize";
 
 import cx from "classnames";
 
@@ -34,6 +34,7 @@ export default class ChartWithLegend extends Component {
       height,
       width,
       showLegend,
+      isDashboard,
     } = this.props;
 
     // padding
@@ -129,7 +130,15 @@ export default class ChartWithLegend extends Component {
           {children}
         </div>
         {/* spacer div to balance legend */}
-        {legend && <div className={cx(styles.LegendSpacer)}>{legend}</div>}
+        {legend && (
+          <div
+            className={cx(styles.LegendSpacer)}
+            // don't center the chart on dashboards
+            style={isDashboard ? { flexBasis: 0 } : {}}
+          >
+            {legend}
+          </div>
+        )}
       </div>
     );
   }

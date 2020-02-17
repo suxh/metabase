@@ -2,7 +2,7 @@
 
 import { createEntity, undo } from "metabase/lib/entities";
 
-import colors from "metabase/lib/colors";
+import { color } from "metabase/lib/colors";
 import * as Urls from "metabase/lib/urls";
 
 import { CollectionSchema } from "metabase/schema";
@@ -86,13 +86,13 @@ const Collections = createEntity({
   form: {
     fields: (
       values = {
-        color: colors.brand,
+        color: color("brand"),
       },
     ) => [
       {
         name: "name",
         title: t`Name`,
-        placeholder: "My new fantastic collection",
+        placeholder: t`My new fantastic collection`,
         validate: name =>
           (!name && t`Name is required`) ||
           (name && name.length > 100 && t`Name must be 100 characters or less`),
@@ -101,14 +101,14 @@ const Collections = createEntity({
         name: "description",
         title: t`Description`,
         type: "text",
-        placeholder: "It's optional but oh, so helpful",
+        placeholder: t`It's optional but oh, so helpful`,
         normalize: description => description || null, // expected to be nil or non-empty string
       },
       {
         name: "color",
         title: t`Color`,
         type: "hidden",
-        initial: () => colors.brand,
+        initial: () => color("brand"),
         validate: color => !color && t`Color is required`,
       },
       {
